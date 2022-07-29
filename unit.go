@@ -13,8 +13,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-const prec = 256 // TODO: what is a good value here?
-
 // System is a unified system of units.
 // Because generics doesn't support methods,
 // all manipulation of Systems go through functions.
@@ -37,14 +35,14 @@ func NewSystem(name string) *System {
 type basic struct {
 	name   string
 	idx    int
-	factor *big.Float
+	factor *big.Rat
 }
 
 // dim is a dimensional unit.
 type dim struct {
 	num    []string
 	den    []string
-	factor *big.Float
+	factor *big.Rat
 	vec    []int
 }
 
@@ -56,6 +54,14 @@ func convertible(d, e dim) bool {
 	return slices.Equal(d.num, e.num) && slices.Equal(d.den, e.den)
 }
 
+func newRat(f float64) *big.Rat {
+	return new(big.Rat).SetFloat64(f)
+}
+
+func newRatAny(x any) *big.Rat {
+	return newRat(reflect.ValueOf(x).Float())
+}
+
 // AddBasic adds a basic unit to s.
 // Example: AddBasic(s, "meter")
 // If s already has a unit named name, AddBasic returns an error.
@@ -63,7 +69,7 @@ func AddBasic(s *System, name string) error {
 	if _, ok := s.root[name]; ok {
 		return fmt.Errorf("%v already has a unit named %q", s.name, name)
 	}
-	s.root[name] = basic{name: name, factor: big.NewFloat(1), idx: len(s.root)}
+	s.root[name] = basic{name: name, factor: big.NewRat(1, 1), idx: len(s.root)}
 	return nil
 }
 
@@ -78,7 +84,7 @@ func AddConversion(s *System, from, to string, factor float64) error {
 	if _, ok := s.root[to]; ok {
 		return fmt.Errorf("%v already has a unit named %q", s.name, to)
 	}
-	s.root[to] = basic{name: from, factor: big.NewFloat(factor), idx: f.idx}
+	s.root[to] = basic{name: from, factor: newRat(factor), idx: f.idx}
 	return nil
 }
 
@@ -96,7 +102,7 @@ func AddType[T ~float64](s *System, num, den []string) error {
 		return fmt.Errorf("%v has a unit associated with type %v", s.name, rt)
 	}
 	// Simplify and canonicalize.
-	factor := big.NewFloat(1).SetPrec(prec)
+	factor := newRat(1)
 	vec := make([]int, len(s.root))
 	isNum := make(map[string]string)
 	var canonNum []string
@@ -146,7 +152,7 @@ func Convert[To ~float64](s *System, from any) (To, error) {
 	if !convertible(toDim, fromDim) {
 		return to, fmt.Errorf("%s cannot convert from %v to %v", s.name, fromTyp, toTyp)
 	}
-	result := big.NewFloat(reflect.ValueOf(from).Float()).SetPrec(prec)
+	result := newRatAny(from)
 	result = result.Quo(result, toDim.factor)
 	result = result.Mul(result, fromDim.factor)
 	f, _ := result.Float64()
@@ -163,7 +169,7 @@ func Combine[To ~float64](s *System, args ...any) (To, error) {
 
 	veclen := len(s.root)
 	var vecs [][]int
-	var factors []*big.Float
+	var factors []*big.Rat
 	for _, arg := range args {
 		argTyp := reflect.TypeOf(arg)
 		argDim, ok := s.typOf[argTyp]
@@ -186,10 +192,10 @@ func Combine[To ~float64](s *System, args ...any) (To, error) {
 	if !found {
 		return to, fmt.Errorf("impossible conversion") // TODO: better error
 	}
-	result := big.NewFloat(1).SetPrec(prec)
+	result := newRat(1)
 	for i := range vecs {
 		factor := factors[i]
-		val := big.NewFloat(reflect.ValueOf(args[i]).Float())
+		val := newRatAny(args[i])
 		if bits.at(i) == -1 {
 			// Divide
 			result = result.Quo(result, val)
