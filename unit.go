@@ -159,6 +159,10 @@ func Convert[To ~float64](s *System, from any) (To, error) {
 	return To(f), nil
 }
 
+// Combine combines the values in args to get a value with the units To.
+// It will only do the computation if the units make the result unambiguous.
+// For example, if you request meters per second, and provide m meters
+// and s seconds, it will result m/s.
 func Combine[To ~float64](s *System, args ...any) (To, error) {
 	var to To
 	toTyp := reflect.TypeOf(to)
