@@ -13,14 +13,17 @@ func TestConvert(t *testing.T) {
 	try.E(unit.AddBasic(s, "m"))
 	try.E(unit.AddBasic(s, "s"))
 	try.E(unit.AddConversion(s, "m", "km", 1000))
+	try.E(unit.AddConversion(s, "km", "gm", 1000))
 	type meter float64
 	type kilometer float64
+	type gigameter float64
 	type seconds float64
 	type metersPerSecond float64
 	type secondsPerMeter float64
 	type metersSquaredPerSecond float64
 	try.E(unit.AddType[meter](s, []string{"m"}, nil))
 	try.E(unit.AddType[kilometer](s, []string{"km"}, nil))
+	try.E(unit.AddType[gigameter](s, []string{"gm"}, nil))
 	try.E(unit.AddType[seconds](s, []string{"s"}, nil))
 	try.E(unit.AddType[metersPerSecond](s, []string{"m"}, []string{"s"}))
 	try.E(unit.AddType[secondsPerMeter](s, []string{"s"}, []string{"m"}))
@@ -30,6 +33,10 @@ func TestConvert(t *testing.T) {
 	km := try.E1(unit.Convert[kilometer](s, m))
 	if km != 5 {
 		t.Fatalf("5000km = %vm, want 5", km)
+	}
+	gm := try.E1(unit.Convert[gigameter](s, m))
+	if gm != 5/1000.0 {
+		t.Fatalf("5000km = %vgm, want 5/1000.0", gm)
 	}
 	m = try.E1(unit.Convert[meter](s, km))
 	if m != 5000 {

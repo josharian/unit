@@ -5,6 +5,7 @@ package unit
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"reflect"
 	"sort"
@@ -77,6 +78,9 @@ func AddBasic(s *System, name string) error {
 // If s has no unit named from, or already has a unit named to, AddConversion returns an error.
 // Example: AddConversion(s, "meter", "kilometer", 1000)
 func AddConversion(s *System, from, to string, factor float64) error {
+	if factor == 0 || math.IsNaN(factor) || math.IsInf(factor, 0) {
+		return fmt.Errorf("invalid factor %v", factor)
+	}
 	f, ok := s.root[from]
 	if !ok {
 		return fmt.Errorf("%v has no unit named %q", s.name, from)
@@ -84,7 +88,13 @@ func AddConversion(s *System, from, to string, factor float64) error {
 	if _, ok := s.root[to]; ok {
 		return fmt.Errorf("%v already has a unit named %q", s.name, to)
 	}
-	s.root[to] = basic{name: from, factor: newRat(factor), idx: f.idx}
+	rf := newRat(factor)
+	if f.name != from {
+		// from points to a unit that also has a conversion factor.
+		s.root[to] = basic{name: f.name, factor: rf.Mul(rf, f.factor), idx: f.idx}
+	} else {
+		s.root[to] = basic{name: from, factor: rf, idx: f.idx}
+	}
 	return nil
 }
 
@@ -162,7 +172,7 @@ func Convert[To ~float64](s *System, from any) (To, error) {
 // Combine combines the values in args to get a value with the units To.
 // It will only do the computation if the units make the result unambiguous.
 // For example, if you request meters per second, and provide m meters
-// and s seconds, it will result m/s.
+// and s seconds, it will return m/s.
 func Combine[To ~float64](s *System, args ...any) (To, error) {
 	var to To
 	toTyp := reflect.TypeOf(to)
@@ -189,6 +199,7 @@ func Combine[To ~float64](s *System, args ...any) (To, error) {
 	if len(vecs) > 16 {
 		return to, fmt.Errorf("too many arguments to Combine, max is 16, got %d", len(vecs))
 	}
+	// TODO: cache this?
 	bits, found, ambiguous := solve(vecs, toDim.vec)
 	if ambiguous {
 		return to, fmt.Errorf("ambiguous conversion") // TODO: better error
@@ -201,11 +212,9 @@ func Combine[To ~float64](s *System, args ...any) (To, error) {
 		factor := factors[i]
 		val := newRatAny(args[i])
 		if bits.at(i) == -1 {
-			// Divide
 			result = result.Quo(result, val)
 			result = result.Quo(result, factor)
 		} else {
-			// Multiply
 			result = result.Mul(result, val)
 			result = result.Mul(result, factor)
 		}
