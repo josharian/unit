@@ -23,6 +23,43 @@ type System struct {
 	root  map[string]basic     // unit name => root unit
 }
 
+// Merge combines multiple unit systems into one.
+// Name or type conflicts result in errors.
+// This lets you define orthogonal units systems (mass, time, etc.) separately
+// and then combine just the ones that you need.
+func Merge(systems ...*System) (*System, error) {
+	buf := new(strings.Builder)
+	typOf := make(map[reflect.Type]dim)
+	root := make(map[string]basic)
+	tot := 0
+	for _, s := range systems {
+		tot += len(s.root)
+	}
+	idx := 0
+	for i, s := range systems {
+		if i > 0 {
+			buf.WriteString("+")
+		}
+		buf.WriteString(s.name)
+		for k, v := range s.typOf {
+			if _, ok := typOf[k]; ok {
+				return nil, fmt.Errorf("duplicate registered type %v", k)
+			}
+			vec := make([]int, tot)
+			copy(vec[idx:], v.vec)
+			typOf[k] = dim{num: v.num, den: v.den, factor: v.factor, vec: vec}
+		}
+		for k, v := range s.root {
+			if _, ok := root[k]; ok {
+				return nil, fmt.Errorf("duplicate registered unit %q", k)
+			}
+			root[k] = basic{name: v.name, idx: idx + v.idx, factor: v.factor}
+		}
+		idx += len(s.root)
+	}
+	return &System{name: buf.String(), typOf: typOf, root: root}, nil
+}
+
 // NewSystem creates a new units system named name.
 // The name is used in error strings.
 //
@@ -147,6 +184,8 @@ func AddType[T ~float64](s *System, num, den []string) error {
 
 // Convert converts from from to To.
 // Both from and To must have had their types added to s via an AddType call.
+// Convert is a special case of Combine, but it is cheaper and conveys intent.
+// TODO: Delete it?
 func Convert[To ~float64](s *System, from any) (To, error) {
 	var to To
 	toTyp := reflect.TypeOf(to)

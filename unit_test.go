@@ -71,3 +71,38 @@ func TestConvert(t *testing.T) {
 		}
 	}
 }
+
+func TestMerge(t *testing.T) {
+	time := unit.NewSystem("time")
+	try.E(unit.AddBasic(time, "s"))
+	try.E(unit.AddConversion(time, "s", "ms", 1/1000.0))
+	type s float64
+	type ms float64
+	try.E(unit.AddType[s](time, []string{"s"}, nil))
+	try.E(unit.AddType[ms](time, []string{"ms"}, nil))
+
+	length := unit.NewSystem("length")
+	try.E(unit.AddBasic(length, "m"))
+	try.E(unit.AddConversion(length, "m", "km", 1000.0))
+	type m float64
+	type km float64
+	try.E(unit.AddType[m](length, []string{"m"}, nil))
+	try.E(unit.AddType[km](length, []string{"km"}, nil))
+
+	spacetime := try.E1(unit.Merge(time, length))
+	type metersPerSecond float64
+	type millisecondsPerKilometer float64
+	try.E(unit.AddType[metersPerSecond](spacetime, []string{"m"}, []string{"s"}))
+	try.E(unit.AddType[millisecondsPerKilometer](spacetime, nil, []string{"km", "ms"}))
+	var fast metersPerSecond = 2 // meters per second
+	recip := try.E1(unit.Combine[millisecondsPerKilometer](spacetime, fast))
+	if recip != 0.5 {
+		t.Fatalf("want 0.5, got %v", recip)
+	}
+
+	var secs s = 3
+	dist := try.E1(unit.Combine[m](spacetime, fast, secs))
+	if dist != 6 {
+		t.Fatalf("want 6, got %v", dist)
+	}
+}
